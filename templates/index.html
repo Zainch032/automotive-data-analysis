@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Car price desk</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <div class="wrap top">
+      <div>
+        <p class="brand">Car price <span>desk</span></p>
+        <p class="lede">What the notebook found, where that work goes wrong, and a price estimate in dollars.</p>
+      </div>
+      <nav>
+        <a href="#findings">Findings</a>
+        <a href="#problems">Problems</a>
+        <a href="#models">Models</a>
+        <a href="#predict">Estimate</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="metrics">
+      <article class="metric">
+        <span class="label">Cars in the file</span>
+        <strong>{{ page.cars }}</strong>
+        <p>Model years 1990–2017</p>
+      </article>
+      <article class="metric">
+        <span class="label">Real 2-door average</span>
+        <strong>{{ page.two_door_avg }}</strong>
+        <p>After removing $2,000 placeholders</p>
+      </article>
+      <article class="metric">
+        <span class="label">Placeholder prices</span>
+        <strong>{{ page.placeholder_count }}</strong>
+        <p>Rows listed at exactly $2,000</p>
+      </article>
+      <article class="metric">
+        <span class="label">Typical miss</span>
+        <strong>{{ page.best_mae }}</strong>
+        <p>Random Forest holdout error, in dollars</p>
+      </article>
+    </div>
+
+    <section id="findings">
+      <div class="section-head">
+        <h2>Important findings</h2>
+      </div>
+      <div class="grid-2">
+        <div class="stack">
+          {% for item in page.insights %}
+          <article class="card">
+            <span class="kicker">{{ item.kicker }}</span>
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.body }}</p>
+          </article>
+          {% endfor %}
+        </div>
+        <div class="stack">
+          <article class="card">
+            <span class="kicker">Premium 2-door brands</span>
+            <h3>Over $100,000</h3>
+            <div class="bars">
+              {% for brand in page.brands %}
+              <div class="bar-row">
+                <span>{{ brand.name }}</span>
+                <div class="track"><span style="width: {{ brand.width }}%"></span></div>
+                <strong>{{ brand.count }}</strong>
+              </div>
+              {% endfor %}
+            </div>
+          </article>
+          <article class="card">
+            <span class="kicker">What the corrected model uses</span>
+            <h3>Share of the forest</h3>
+            <div class="bars">
+              {% for row in page.importance %}
+              <div class="bar-row">
+                <span>{{ row.label }}</span>
+                <div class="track"><span style="width: {{ row.width }}%"></span></div>
+                <strong>{{ row.share }}%</strong>
+              </div>
+              {% endfor %}
+            </div>
+          </article>
+          <article class="card">
+            <span class="kicker">Empty cells</span>
+            <h3>Where the file is missing data</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Column</th><th>Missing</th></tr></thead>
+                <tbody>
+                  {% for row in page.missing %}
+                  <tr><td>{{ row.name }}</td><td>{{ row.pct }}%</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="problems">
+      <div class="section-head">
+        <h2>Problems in the notebook</h2>
+        <p>These are issues in the analysis itself, not just things the data is missing.</p>
+      </div>
+      <div class="stack">
+        {% for item in page.problems %}
+        <article class="card">
+          <span class="level level-{{ item.level|lower }}">{{ item.level }}</span>
+          <h3>{{ item.title }}</h3>
+          <p>{{ item.body }}</p>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="models">
+      <div class="section-head">
+        <h2>Notebook scores vs a dollar model</h2>
+      </div>
+      <div class="grid-2">
+        <article class="card">
+          <span class="kicker">What the notebook printed</span>
+          <h3>Scaled price, not dollars</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Model</th><th>R²</th><th>MAE</th></tr></thead>
+              <tbody>
+                {% for row in page.notebook_scores %}
+                <tr>
+                  <td>{{ row.name }}</td>
+                  <td>{{ "%.3f"|format(row.r2) }}</td>
+                  <td>{{ "%.4f"|format(row.mae) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="note">Random Forest still ranks first. The MAE column is on standardized price, so 0.0515 is not $0.05 and it is not $2,500.</p>
+        </article>
+        <article class="card">
+          <span class="kicker">Corrected holdout, same 80/20 split</span>
+          <h3>Error in dollars</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Model</th><th>R²</th><th>Typical miss</th></tr></thead>
+              <tbody>
+                {% for row in page.corrected_scores %}
+                <tr class="{{ 'best' if loop.first else '' }}">
+                  <td>{{ row.name }}</td>
+                  <td>{{ "%.3f"|format(row.r2) }}</td>
+                  <td>${{ "{:,}".format(row.mae) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="note">Trained on {{ page.trained_on }} cars with a real price. $2,000 placeholders are out. Text fields are one-hot encoded, and the price is left in dollars. The estimate uses the highlighted model, the one with the smallest dollar miss. Its R² is {{ page.best_r2 }}. The decision tree’s R² is a bit higher, but it misses by more dollars.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="predict">
+      <div class="section-head">
+        <h2>Estimate a price</h2>
+        <p>Uses the corrected Random Forest. The number comes back in dollars.</p>
+      </div>
+      <div class="predict-layout">
+        <form id="predict-form" class="predict-card">
+          <label>Brand
+            <select name="make">
+              {% for value in options.makes %}
+              <option value="{{ value }}" {{ "selected" if value == "BMW" else "" }}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Year
+            <input name="year" type="number" min="1990" max="2020" value="2011" required>
+          </label>
+          <label>Horsepower
+            <input name="engine_hp" type="number" min="50" max="1200" value="335" required>
+          </label>
+          <label>Cylinders
+            <select name="cylinders">
+              {% for value in options.cylinders %}
+              <option value="{{ value }}" {{ "selected" if value == 6 else "" }}>{{ value if value else "0 (electric)" }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Transmission
+            <select name="transmission">
+              {% for value in options.transmissions %}
+              <option value="{{ value }}" {{ "selected" if value == "MANUAL" else "" }}>{{ value.replace("_", " ") }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Drivetrain
+            <select name="drive">
+              {% for value in options.drives %}
+              <option value="{{ value }}" {{ "selected" if value == "rear wheel drive" else "" }}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Doors
+            <select name="doors">
+              {% for value in options.doors %}
+              <option value="{{ value }}" {{ "selected" if value == 2 else "" }}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Size
+            <select name="size">
+              {% for value in options.sizes %}
+              <option value="{{ value }}" {{ "selected" if value == "Compact" else "" }}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Body style
+            <select name="style">
+              {% for value in options.styles %}
+              <option value="{{ value }}" {{ "selected" if value == "Coupe" else "" }}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Fuel
+            <select name="fuel">
+              {% for value in options.fuels %}
+              <option value="{{ value }}" {{ "selected" if value == "premium unleaded (required)" else "" }}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Market tag
+            <select name="market">
+              {% for value in options.markets %}
+              <option value="{{ value }}" {{ "selected" if value == "Luxury" else "" }}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Highway MPG
+            <input name="highway_mpg" type="number" min="5" max="150" value="26" required>
+          </label>
+          <label>City MPG
+            <input name="city_mpg" type="number" min="5" max="150" value="19" required>
+          </label>
+          <div class="full">
+            <button type="submit" id="predict-button">Estimate price</button>
+          </div>
+        </form>
+
+        <aside class="predict-card result" id="result" aria-live="polite">
+          <span class="kicker">Estimate</span>
+          <h3 id="result-title">Waiting for a car</h3>
+          <p id="result-copy">The form starts as a 2011 BMW coupe, close to the first row in the file. That car’s listed price is $46,135.</p>
+        </aside>
+      </div>
+    </section>
+
+    <footer>
+      <p>Transmission mix in the file:
+        {% for row in page.transmission %}{{ row.name }} {{ row.pct }}%{% if not loop.last %}, {% endif %}{% endfor %}.
+      </p>
+    </footer>
+  </main>
+
+  <script>
+    const form = document.getElementById("predict-form");
+    const button = document.getElementById("predict-button");
+    const result = document.getElementById("result");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      button.textContent = "Estimating...";
+      const payload = Object.fromEntries(new FormData(form).entries());
+      try {
+        const response = await fetch("/api/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          result.innerHTML = `<span class="kicker">Estimate</span><h3>Could not estimate</h3><p class="warn">${data.error}</p>`;
+          return;
+        }
+        const warnings = data.warnings.map((text) => `<p class="warn">${text}</p>`).join("");
+        const similar = data.similar.map((car) => (
+          `<li><span>${car.name}<br><small>${car.style} · ${car.hp}</small></span><strong>${car.price}</strong></li>`
+        )).join("");
+        result.innerHTML = `
+          <span class="kicker">Estimate</span>
+          <p class="price">${data.price_label}</p>
+          <p class="band">On held-out cars, the typical miss is about ${data.mae_label}. A rough band around this estimate is ${data.low_label}–${data.high_label}. Model name is not used, so a rare trim can sit outside that band.</p>
+          ${warnings}
+          <p class="kicker" style="margin-top:16px">Close cars already in the file</p>
+          <ul class="similar">${similar}</ul>
+        `;
+      } catch (error) {
+        result.innerHTML = `<span class="kicker">Estimate</span><h3>Could not estimate</h3><p class="warn">The server did not answer.</p>`;
+      } finally {
+        button.disabled = false;
+        button.textContent = "Estimate price";
+      }
+    });
+  </script>
+</body>
+</html>
